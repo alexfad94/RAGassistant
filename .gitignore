@@ -1,0 +1,45 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# --- Virtual environments ---
+venv/
+.venv/
+venv_py311/
+env/
+
+# --- Local env / secrets ---
+.env
+.env.local
+.env.*.local
+
+# --- Databases / runtime artifacts ---
+*.db
+*.sqlite
+*.sqlite3
+rag_cache.db
+
+# --- Project runtime data ---
+data/images/
+data/loaded_files.json
+
+# --- Frontend (Vite/React) ---
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.cache/
+
+# --- OS / IDE ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
