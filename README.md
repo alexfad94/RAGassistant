@@ -7,6 +7,8 @@ RAG-приложение для ответов по документам (`PDF`/
 - **Vector DB:** `Pinecone`
 - **LLM/Embeddings:** `OpenAI` (приоритет) или `GigaChat` (fallback)
 - **Cache:** локальный `SQLite`
+- **Logging:** лог всех взаимодействий в `SQLite` (`logs.db`)
+- **Telegram Bot:** асинхронный бот на `python-telegram-bot`
 
 ---
 
@@ -34,6 +36,8 @@ RAG-приложение для ответов по документам (`PDF`/
    - получает ответ от LLM,
    - кладет результат в кэш.
 3. Frontend показывает ответ, контекст и релевантные изображения.
+4. Все взаимодействия логируются в `logs.db` через `DatabaseLogger`.
+5. Telegram бот (`telegram_bot.py`) предоставляет тот же функционал через чат с командами `/stats`, `/logs`.
 
 ---
 
@@ -57,6 +61,8 @@ RAGassistant/
 ├── cache.py                       # SQLite-кэш ответов
 ├── loaded_files.py                # Инкрементальная загрузка документов
 ├── gigachat_client.py             # Клиент GigaChat
+├── db_logger.py                   # Логирование запросов в SQLite
+├── telegram_bot.py                # Telegram бот для RAG-ассистента
 ├── evaluate_ragas.py              # Скрипт оценки качества (RAGAS)
 ├── requirements.txt
 ├── .env
@@ -92,6 +98,10 @@ RAGassistant/
   - Загрузка одного `PDF/TXT` и инкрементальная индексация.
 - `GET /api/images/{path}`
   - Отдача извлеченных изображений из `data/images`.
+- `GET /api/logs/stats`
+  - Статистика по логам взаимодействий (всего запросов, из кеша, уникальных пользователей, среднее время).
+- `GET /api/logs`
+  - Получение логов с фильтрацией (`limit`, `user_id`, `source`).
 - `GET /api/documents/{filename}`
   - Отдача исходного документа (`.pdf`/`.txt`).
 
@@ -138,6 +148,27 @@ RAGassistant/
 ```
 
 При выдаче через API поле `images` нормализуется в массив строк для фронтенда.
+
+### Database logging (`db_logger.py`)
+
+Все запросы к RAG-ассистенту автоматически логируются в `logs.db`:
+
+- Вопрос, ответ, источник (`console`, `telegram`, `api`), `user_id`, `username`.
+- Флаг `from_cache` и время ответа в миллисекундах.
+- Просмотр статистики и экспорт в CSV через команду `/logs` в Telegram боте или через API `/api/logs`.
+
+### Telegram Bot (`telegram_bot.py`)
+
+Асинхронный бот для Telegram с теми же возможностями, что и веб-интерфейс:
+
+- **Команды:**
+  - `/start` — приветствие.
+  - `/help` — справка.
+  - `/stats` — статистика системы (документы, кеш, логи).
+  - `/logs` — экспорт логов текущего пользователя в CSV.
+- Поддержка длинных ответов (разбивка на части >4000 символов).
+- Индикатор ответа из кеша (`💾 (ответ из кеша)`).
+- Все взаимодействия логируются в `logs.db` с указанием `user_id` и `username`.
 
 ### PDF processing (`pdf_processor.py`)
 
@@ -203,6 +234,9 @@ GIGACHAT_RQUID=...
 # Пути
 DATA_DIR=data
 CACHE_DB_PATH=rag_cache.db
+
+# Telegram Bot (опционально)
+TELEGRAM_BOT_TOKEN=
 ```
 
 Рекомендуемые параметры:
@@ -242,7 +276,21 @@ pip install -r requirements.txt
 python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 3) Запуск frontend
+### 3) Запуск Telegram бота (опционально)
+
+Укажите токен от [@BotFather](https://t.me/BotFather) в `.env`:
+
+```env
+TELEGRAM_BOT_TOKEN=ваш_токен_бота
+```
+
+Запуск:
+
+```bash
+python telegram_bot.py
+```
+
+### 4) Запуск frontend
 
 ```bash
 cd frontend

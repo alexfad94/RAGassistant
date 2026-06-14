@@ -32,6 +32,9 @@ rag_cache.db
 data/images/
 data/loaded_files.json
 
+# --- PDF files ---
+data/*.pdf
+
 # --- Frontend (Vite/React) ---
 frontend/node_modules/
 frontend/dist/
@@ -43,3 +46,4 @@ frontend/.cache/
 Thumbs.db
 .idea/
 .vscode/
+

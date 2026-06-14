@@ -3,6 +3,7 @@ RAG pipeline with OpenAI or GigaChat fallback.
 Flow: cache -> vector search -> LLM -> cache.
 """
 
+import time
 from typing import Dict, Any, List
 import os
 from pathlib import Path
@@ -14,6 +15,7 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from vector_store import VectorStore
 from cache import RAGCache
+from db_logger import DatabaseLogger
 from loaded_files import get_loaded_files
 
 
@@ -26,10 +28,12 @@ class RAGPipeline:
         data_file: str | None = None,
         model: str | None = None,
         loaded_files_dir: str | None = None,
+        logger: DatabaseLogger | None = None,
     ):
         self._detect_provider()
         self.model = model or (self._openai_model if self._provider == "openai" else self._gigachat_model)
         self.loaded_files_dir = Path(loaded_files_dir or os.getenv("DATA_DIR", "data"))
+        self.logger = logger
 
         print("Initializing vector store...")
         self.vector_store = VectorStore(loaded_files_dir=str(self.loaded_files_dir))
@@ -118,7 +122,10 @@ class RAGPipeline:
             ).strip()
 
     def query(self, user_query: str, use_cache: bool = True) -> Dict[str, Any]:
+        start_time = time.time()
         print(f"\n{'='*60}\nЗапрос: {user_query}\n{'='*60}")
+
+        from_cache = False
 
         if use_cache:
             cached_result = self.cache.get(user_query)
@@ -137,13 +144,16 @@ class RAGPipeline:
                         })
                     else:
                         context_docs.append({"text": str(c), "images": [], "chunk_number": None, "section_header": None, "source": None})
-                return {
+                from_cache = True
+                response = {
                     "query": user_query,
                     "answer": cached_result["answer"],
                     "from_cache": True,
                     "context_docs": context_docs,
                     "cached_at": cached_result.get("created_at"),
                 }
+                self._log_query(user_query, response["answer"], from_cache, start_time)
+                return response
             print("[-] Ответ не найден в кеше")
 
         print("[*] Поиск релевантных документов...")
@@ -163,7 +173,7 @@ class RAGPipeline:
             ]
             self.cache.set(user_query, answer, context_for_cache)
 
-        return {
+        response = {
             "query": user_query,
             "answer": answer,
             "from_cache": False,
@@ -171,6 +181,21 @@ class RAGPipeline:
             "model": self.model,
             "mode": self._provider.upper(),
         }
+        self._log_query(user_query, answer, from_cache, start_time)
+        return response
+
+    def _log_query(self, query: str, answer: str, from_cache: bool, start_time: float):
+        """Логирует запрос в DatabaseLogger, если он установлен."""
+        if self.logger is None:
+            return
+        response_time_ms = int((time.time() - start_time) * 1000)
+        self.logger.log_interaction(
+            query=query,
+            response=answer,
+            source="console",
+            from_cache=from_cache,
+            response_time_ms=response_time_ms,
+        )
 
     def get_stats(self) -> Dict[str, Any]:
         return {

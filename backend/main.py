@@ -23,26 +23,30 @@ from pydantic import BaseModel
 
 # Импорт из корня проекта
 from rag_pipeline import RAGPipeline
+from db_logger import DatabaseLogger
 
 
-# Глобальный экземпляр pipeline (инициализируется при старте)
+# Глобальные экземпляры (инициализируются при старте)
 pipeline: RAGPipeline | None = None
+db_logger: DatabaseLogger | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Инициализация и очистка при старте/остановке."""
-    global pipeline
+    global pipeline, db_logger
     try:
         data_dir_name = os.getenv("DATA_DIR", "data")
         cache_path = os.getenv("CACHE_DB_PATH", "rag_cache.db")
         data_dir = project_root / data_dir_name
         cache_db_path = str(project_root / cache_path) if not os.path.isabs(cache_path) else cache_path
+        db_logger = DatabaseLogger()
         pipeline = RAGPipeline(
             cache_db_path=cache_db_path,
             data_file=str(data_dir),
             model=os.getenv("LLM_MODEL"),
             loaded_files_dir=str(data_dir),
+            logger=db_logger,
         )
         print("RAG Pipeline инициализирован")
     except Exception as e:
@@ -99,6 +103,26 @@ class StatsResponse(BaseModel):
 async def health():
     """Проверка доступности API."""
     return {"status": "ok", "pipeline_ready": pipeline is not None}
+
+
+@app.get("/api/logs/stats")
+async def log_stats():
+    """Получить статистику по логам взаимодействий."""
+    if db_logger is None:
+        raise HTTPException(status_code=503, detail="Логгер не инициализирован")
+    return db_logger.get_stats()
+
+
+@app.get("/api/logs")
+async def get_logs(
+    limit: int = 100,
+    user_id: str | None = None,
+    source: str | None = None,
+):
+    """Получить логи взаимодействий с фильтрацией."""
+    if db_logger is None:
+        raise HTTPException(status_code=503, detail="Логгер не инициализирован")
+    return db_logger.get_logs(limit=limit, user_id=user_id, source=source)
 
 
 @app.post("/api/query", response_model=QueryResponse)
